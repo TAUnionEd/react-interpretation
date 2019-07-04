@@ -22,9 +22,21 @@ function Component(props, context, updater) {
   this.props = props;
   this.context = context;
   // If a component has string refs, we will assign a different object later.
+  // 若你给一个组件设置了 ref，则在之后的过程中 React 会给 this.refs 赋上相应的值
+  //
+  // 对组件的 ref 最终的处理参考：
+  // packages\react-reconciler\src\ReactFiberCommitWork.js @function commitAttachRef
+  // 会根据 ref 的类型（string、RefObject、callback ref）做不同的处理
+  // 另一种 ref 传递的方式 React.forwardRef 参见 packages\react\src\forwardRef.js
   this.refs = emptyObject;
   // We initialize the default updater but the real one gets injected by the
   // renderer.
+  // React 在这里初始化了一个默认 updatee，
+  // 之后会通过 renderer 给 this.update 赋上一个真正的 updater
+  //
+  // ReactNoopUpdateQueue 仅是一个抽象的 updater，没有任何实现，
+  // 但是对 updater 应有的函数做了解释
+  // packages\react\src\ReactNoopUpdateQueue.js @const ReactNoopUpdateQueue
   this.updater = updater || ReactNoopUpdateQueue;
 }
 

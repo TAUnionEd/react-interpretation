@@ -94,6 +94,10 @@ function defineRefPropWarningGetter(props, displayName) {
  * will work. Instead test $$typeof field against Symbol.for('react.element') to check
  * if something is a React Element.
  *
+ * 创建 React element 对象的工厂方法。此方法没有遵循类模式的声明，所以不要使用 `new` 操作符
+ * 调用它；当然，`instanceof` 也不会正常工作，新建出来的 element instanceof ReactElement 会返回 false。
+ * 作为替代，我们使用 `$$typeof` 是否等于 `Symbol.for('react.element')` 来检查对象是否是 ReactElement。
+ *
  * @param {*} type
  * @param {*} key
  * @param {string|object} ref
@@ -102,8 +106,17 @@ function defineRefPropWarningGetter(props, displayName) {
  * can warn. We want to get rid of owner and replace string `ref`s with arrow
  * functions, and as long as `this` and owner are the same, there will be no
  * change in behavior.
+ *
+ * 用以临时存储 `this`，当 React.createElement 调用时 `owner` 和 `this` 可能会指向不同的对象，
+ * 此时我们可以发出警告。我们希望通过将 `ref` 约束为箭头函数，从而使我们不再依赖 `owner` 做处理，
+ * 这样只要 `this` 和 `owner` 指向同一对象，行为就不会有所变化。
+ *
  * @param {*} source An annotation object (added by a transpiler or otherwise)
  * indicating filename, line number, and/or other information.
+ *
+ * 被编译器或者其他过程添加的对象，会记录文件名、行号以及其他（编译、文件）相关的信息。
+ * 大概是为了方便 debug 和代码追踪而声明的。
+ *
  * @param {*} owner
  * @param {*} props
  * @internal
@@ -167,6 +180,10 @@ const ReactElement = function(type, key, ref, self, source, owner, props) {
 /**
  * Create and return a new ReactElement of the given type.
  * See https://reactjs.org/docs/react-api.html#createelement
+ *
+ * 在这里我们可以大概推测一下 React 中各个实体间的关系：
+ * Components --createElement--> Element --link--> virtualDOM --compute--> DOM
+ * 后面我会尝试验证这种猜测。
  */
 export function createElement(type, config, children) {
   let propName;
@@ -176,13 +193,17 @@ export function createElement(type, config, children) {
 
   let key = null;
   let ref = null;
+  // self 与 source 的作用在上文 ReactElement 中有介绍
   let self = null;
   let source = null;
 
+  // 初始化 config
   if (config != null) {
+    // 若 ref 不为 undefined，赋值
     if (hasValidRef(config)) {
       ref = config.ref;
     }
+    // 若 key 不为 undefined，赋值
     if (hasValidKey(config)) {
       key = '' + config.key;
     }
@@ -190,6 +211,7 @@ export function createElement(type, config, children) {
     self = config.__self === undefined ? null : config.__self;
     source = config.__source === undefined ? null : config.__source;
     // Remaining properties are added to a new props object
+    // 将 key, ref, __self 和 __source 外的其他 config 加入 props 中
     for (propName in config) {
       if (
         hasOwnProperty.call(config, propName) &&
@@ -202,6 +224,8 @@ export function createElement(type, config, children) {
 
   // Children can be more than one argument, and those are transferred onto
   // the newly allocated props object.
+  // 将第三个及之后的参数当作子组件列表放入 props.children 中，
+  // 这就是对文档中 [...children] 的实现
   const childrenLength = arguments.length - 2;
   if (childrenLength === 1) {
     props.children = children;
@@ -219,6 +243,8 @@ export function createElement(type, config, children) {
   }
 
   // Resolve default props
+  // 将 type 中申明的 defaultProps 与 前文处理的 props merge 起来
+  // 在 props 中声明为 undefined 或者未声明的参数都会被 defaultProps 覆盖
   if (type && type.defaultProps) {
     const defaultProps = type.defaultProps;
     for (propName in defaultProps) {
@@ -247,6 +273,8 @@ export function createElement(type, config, children) {
     ref,
     self,
     source,
+    // ReactCurrentOwner 的设计和 RefObject 如出一辙，都是对上下文进行了 object 封装消除歧义或混淆
+    // 渲染过程中，ReactCurrentOwner.current 会被赋值成一个 FiberNode
     ReactCurrentOwner.current,
     props,
   );

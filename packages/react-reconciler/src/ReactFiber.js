@@ -83,65 +83,110 @@ if (__DEV__) {
 
 // A Fiber is work on a Component that needs to be done or was done. There can
 // be more than one per component.
+// Fiber 作用于需要完成或者已完成的组件上。一个组件可能有多个 Fiber。
 export type Fiber = {|
   // These first fields are conceptually members of an Instance. This used to
   // be split into a separate type and intersected with the other Fiber fields,
   // but until Flow fixes its intersection bugs, we've merged them into a
   // single type.
+  //
+  // 最前面列出的这些字段（tag, key, elementType, type & stateNode）在概念上应当是属于另一个单独的实例。
+  // 这些字段之前被抽象成一个单独的 type，然后再与其他 Fiber 的字段同级的放在一起。
+  // 大概是这个意思：type Fiber = {
+  //    Instance: { tag, key, elementType, type, stateNode },
+  //    return,
+  //    child,
+  //    ...
+  // }
+  // 但是在 Flow 把交叉类型（intersection type）有关的 bug 修好前，我们不会把这些字段单独抽成一个 type。
 
   // An Instance is shared between all versions of a component. We can easily
   // break this out into a separate object to avoid copying so much to the
   // alternate versions of the tree. We put this on a single object for now to
   // minimize the number of objects created during the initial render.
+  //
+  // 这些字段组成的实例应当会被所有版本的组件所共享。
+  // 我们可以简单的把他分离出来，以免在 fiber tree 的轮转版本中复制太多次。
+  // 把这些字段抽成单独的对象，也可以将最初的 render 时创建的对象数量降到最低。
+
+  // 总之就是他们想抽出来但是没抽成……
 
   // Tag identifying the type of fiber.
+  // tag 标记了 fiber 的类型。或者说标记了这个 fiber 相关的组件的类型。
   tag: WorkTag,
 
   // Unique identifier of this child.
+  // 此节点在子节点意义下的唯一标识。和 element.key 类似，这个 key 用于区分他和他的兄弟节点们。
   key: null | string,
 
   // The value of element.type which is used to preserve the identity during
   // reconciliation of this child.
+  // ReactElement.type 的值，用于调和（reconciliation）过程中保存此子节点的本征。
   elementType: any,
 
   // The resolved function/class/ associated with this fiber.
+  // 此 fiber 相关的 function 或 class 处理之后的值。
+  // TODO (itpt of Ian): resolve 是指什么过程？为什么从代码上看 elementType 与 type 一直是相等的？
   type: any,
 
   // The local state associated with this fiber.
+  // 此 fiber 相关的本地状态。一般是 fiber 对应的 DOM 实例。
+  // 特别的，ReactRoot 对应的 fiber 其 stateNode 是 FiberRoot。
   stateNode: any,
 
   // Conceptual aliases
   // parent : Instance -> return The parent happens to be the same as the
   // return fiber since we've merged the fiber and instance.
+  //
+  // 概念上的别名
+  // parent: Instance 别称 return
+  // 由于我们把 Fiber 和这个应当抽象出来的 Instance 合并了，所以 parent 和 return 这俩字段现在是一样的。
 
   // Remaining fields belong to Fiber
+  // 剩下的字段是属于 Fiber 的
 
   // The Fiber to return to after finishing processing this one.
   // This is effectively the parent, but there can be multiple parents (two)
   // so this is only the parent of the thing we're currently processing.
   // It is conceptually the same as the return address of a stack frame.
+  //
+  // 当前 fiber 处理流程结束后回到的 fiber 节点。
+  // 实际上就是这个 fiber 节点的父节点，但是在整个流程上这个节点有可能有多个（两个）父节点
+  //（我猜是指 fiber tree 变化前后父节点也有可能变化），故这里的 return 只指我们正在处理的这个场景下的父节点。
+  // 从概念上来说，他和在栈处理时，当前节点将会返回的那个节点是一致的。
+  //（也就是说 Fiber Reconciler 中节点的父子关系和 Stack Reconciler 中节点的父子关系在概念上是一样的）
   return: Fiber | null,
 
   // Singly Linked List Tree Structure.
+  // 单链表树状结构
   child: Fiber | null,
   sibling: Fiber | null,
   index: number,
 
   // The ref last used to attach this node.
   // I'll avoid adding an owner field for prod and model that as functions.
+  // 最终用于添加到这个节点上的 ref。
+  // 这里建议传 function 进来计算 ref。
   ref: null | (((handle: mixed) => void) & {_stringRef: ?string}) | RefObject,
 
   // Input is the data coming into process this fiber. Arguments. Props.
-  pendingProps: any, // This type will be more specific once we overload the tag.
-  memoizedProps: any, // The props used to create the output.
+  // 处理过程中输入 fiber 的数据，其实就是 element.props
+  // This type will be more specific once we overload the tag.
+  // 一但我们载入了 tag，props 的类型就会被具体的定义
+  pendingProps: any,  // 当前处理过程中组件的 props
+  memoizedProps: any, // 已经用于输出的 props，即上一次处理完成之后的 props
 
   // A queue of state updates and callbacks.
+  // 一个 state 更新和回调的队列
+  // 详情见 packages\react-reconciler\src\ReactUpdateQueue.js
   updateQueue: UpdateQueue<any> | null,
 
   // The state used to create the output
+  // 已经用于输出的 state，即上一次处理完成之后的 state
   memoizedState: any,
 
   // A linked-list of contexts that this fiber depends on
+  // 这个 fiber 所依赖的上下文链表
   contextDependencies: ContextDependencyList | null,
 
   // Bitfield that describes properties about the fiber and its subtree. E.g.
@@ -150,31 +195,68 @@ export type Fiber = {|
   // parent. Additional flags can be set at creation time, but after that the
   // value should remain unchanged throughout the fiber's lifetime, particularly
   // before its child fibers are created.
+  //
+  // 一个用来描述 fiber 和其子树的位段属性。比如说，ConcurrentMode 位标记控制其子树是否
+  // 是默认异步的。当一个 fiber 被创建时，他将会从他的父节点那里继承 mode 字段。可以在创建
+  // 阶段操作这些位标记，但是在此之后 fiber 的整个生命周期里，尤其在他的子节点创建之前，
+  // mode 字段都不能再改变了。
+  // TypeOfMode 参见 packages\react-reconciler\src\ReactTypeOfMode.js
   mode: TypeOfMode,
 
   // Effect
+  // 功能标记。标记着这个 fiber 将要对 host 元素（即 DOM）或者 element 做什么操作。
+  // 详情见 packages\shared\ReactSideEffectTags.js
+  // 从中可以发现这些操作包括更新 DOM 树，调用组件生命周期，更新 ref 等操作。
+  // 同样是一个位段。意味着这里可以同时记录多个 effect。
   effectTag: SideEffectTag,
 
   // Singly linked list fast path to the next fiber with side-effects.
+  // 单链表，用来快速定位下一个有副作用操作的 fiber
   nextEffect: Fiber | null,
 
   // The first and last fiber with side-effect within this subtree. This allows
   // us to reuse a slice of the linked list when we reuse the work done within
   // this fiber.
+  // 子树中第一个和最后一个具有副作用的 fiber。记录首尾可以让我们在复用当前 fiber 所作的工作时，
+  // 复用相应的 effect 链表。
+  //
+  // 在整个 fiber tree 创建过程中，Fiber Reconciler 会尽量复用 fiber。
+  // fiber 复用的逻辑参见：
+  // packages\react-reconciler\src\ReactChildFiber.js#L733 @reconcileChildrenArray
   firstEffect: Fiber | null,
   lastEffect: Fiber | null,
 
   // Represents a time in the future by which this work should be completed.
   // Does not include work found in its subtree.
+  // 代表着当前任务会在未来的什么时候完成。
+  // 不包括子树中发现的任务。
+  // 计算方法见 packages\react-reconciler\src\ReactFiberScheduler.js#1595 @computeExpirationForFiber
   expirationTime: ExpirationTime,
 
   // This is used to quickly determine if a subtree has no pending changes.
+  // 用于快速确定子树是否含有等待中的变更。
+  // 若 childExpirationTime >= expirationTime，则显然子树是有变更的。
+  // 若无变更 childExpirationTime 一般会为 Sync 或 NoWork
   childExpirationTime: ExpirationTime,
 
   // This is a pooled version of a Fiber. Every fiber that gets updated will
   // eventually have a pair. There are cases when we can clean up pairs to save
   // memory if we need to.
+  // 这是 fiber 的一个副本。每一个 fiber。每一个会更新的 fiber 都会有一个副本与之对应。
+  // 某些情况下如有必要减少内存消耗，我们会清理这些副本。
+  //
+  // fiber 与 workInProgress 互相持有 alternate 引用
+  // alternate 的创建参见下文 @createWorkInProgress
   alternate: Fiber | null,
+
+  // Conceptual aliases
+  // workInProgress : Fiber ->  alternate The alternate used for reuse happens
+  // to be the same as work in progress.
+  // 概念上的别名
+  // workInProgress: Fiber 别称 alternate
+  // 用于复用的字段 alternate 与 workInProgress 相同。
+
+  // 以下四个字段都仅与 profile 有关，忽略
 
   // Time spent rendering this Fiber and its descendants for the current update.
   // This tells us how well the tree makes use of sCU for memoization.
@@ -197,9 +279,6 @@ export type Fiber = {|
   // This field is only set when the enableProfilerTimer flag is enabled.
   treeBaseDuration?: number,
 
-  // Conceptual aliases
-  // workInProgress : Fiber ->  alternate The alternate used for reuse happens
-  // to be the same as work in progress.
   // __DEV__ only
   _debugID?: number,
   _debugSource?: Source | null,
@@ -425,8 +504,10 @@ export function createWorkInProgress(
 }
 
 export function createHostRootFiber(isConcurrent: boolean): Fiber {
+  // 若是并行操作生成 Root Fiber，则记为“并行+严格”模式，否则不做限制
   let mode = isConcurrent ? ConcurrentMode | StrictMode : NoContext;
 
+  // 开启 profiler 才会有功能，忽略
   if (enableProfilerTimer && isDevToolsPresent) {
     // Always collect profile timings when DevTools are present.
     // This enables DevTools to start capturing timing at any point–
@@ -434,6 +515,7 @@ export function createHostRootFiber(isConcurrent: boolean): Fiber {
     mode |= ProfileMode;
   }
 
+  // HostRoot，ReactWorkTag 中的一种。ReactWorkTag 用来描述这个 fiber 是用来处理什么任务的。
   return createFiber(HostRoot, null, null, mode);
 }
 

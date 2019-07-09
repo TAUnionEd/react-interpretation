@@ -7,6 +7,7 @@
  * @flow
  */
 
+// TODO (itpt of Ian)
 // UpdateQueue is a linked list of prioritized updates.
 //
 // Like fibers, update queues come in pairs: a current queue, which represents

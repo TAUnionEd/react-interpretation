@@ -367,6 +367,8 @@ function ReactRoot(
   isConcurrent: boolean,
   hydrate: boolean,
 ) {
+  // createContainer 实际 import 自 packages\react-reconciler\src\ReactFiberReconciler.js
+  // 这里就已经在准备和 Fiber 进行交互了，createContainer 返回一个 FiberRoot 对象
   const root = createContainer(container, isConcurrent, hydrate);
   this._internalRoot = root;
 }
@@ -496,12 +498,17 @@ function legacyCreateRootFromDOMContainer(
   container: DOMContainer,
   forceHydrate: boolean,
 ): Root {
+  // 服务器渲染相关，忽略
   const shouldHydrate =
     forceHydrate || shouldHydrateDueToLegacyHeuristic(container);
   // First clear any existing content.
   if (!shouldHydrate) {
     let warned = false;
     let rootSibling;
+
+    // 清除 container 的所有子节点
+    // 注意这里是对 DOM 进行直接的操作，所以若无必要，不要在 render 的根节点内申明子节点
+    // 以防止不必要的回流和重绘
     while ((rootSibling = container.lastChild)) {
       if (__DEV__) {
         if (
@@ -533,6 +540,7 @@ function legacyCreateRootFromDOMContainer(
     }
   }
   // Legacy roots are not async by default.
+  // 旧版本的根节点默认不是并行生成的
   const isConcurrent = false;
   return new ReactRoot(container, isConcurrent, shouldHydrate);
 }
@@ -550,9 +558,15 @@ function legacyRenderSubtreeIntoContainer(
 
   // TODO: Without `any` type, Flow says "Property cannot be accessed on any
   // member of intersection type." Whyyyyyy.
+  //
+  // 如果考虑是从 React.render 中调用的情形，
+  // 第一次调用时，这里的 container（即根节点 DOM）显然是没有 _reactRootContainer 这个属性的；
+  // 但如果你重复调用针对同一 DOM 的 React.render，
+  // _reactRootContainer 显然是有值的，就会进入更新流程。
   let root: Root = (container._reactRootContainer: any);
   if (!root) {
     // Initial mount
+    // container 首次处理，添加一个 ReactRoot 实例到 _reactRootContainer 属性
     root = container._reactRootContainer = legacyCreateRootFromDOMContainer(
       container,
       forceHydrate,
@@ -560,6 +574,7 @@ function legacyRenderSubtreeIntoContainer(
     if (typeof callback === 'function') {
       const originalCallback = callback;
       callback = function() {
+        // 实际上调用了 packages\react-reconciler\src\ReactFiberReconciler.js @getPublicRootInstance
         const instance = getPublicRootInstance(root._internalRoot);
         originalCallback.call(instance);
       };
@@ -670,7 +685,9 @@ const ReactDOM: Object = {
     );
   },
 
-  render(
+  // ReactDom.render 入口
+  // 替换“render(”便于搜索定位 ReactDom.render
+  render: function render(
     element: React$Element<any>,
     container: DOMContainer,
     callback: ?Function,

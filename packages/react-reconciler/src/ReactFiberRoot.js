@@ -39,13 +39,10 @@ type BaseFiberRootProperties = {
   // TODO (itpt of Ian): what is persistent and mutation update mean in React?
   pendingChildren: any,
   // The currently active root fiber. This is the mutable root of the tree.
-  // 当前活动的 FiberNode，即为正在处理的 FiberNode。
+  // 当前活动的 FiberNode，实际上就是指 hostRootFiber。
   //
-  // 这里强调所谓 root，我的理解是：
-  // 因为 FiberNode 有三个方向 return、child 和 sibling，使得我们不论从哪一个节点出发，
-  // 都可以找到一个有向树使我们能遍历整个 fiber tree。
-  // current 会随着 Fiber 的处理流程而不断移动，但不论移动到哪里，
-  // current 指向的 FiberNode 都有能力当整个 fiber tree 的 root。
+  // 在执行 packages\react-reconciler\src\ReactFiberScheduler.js @commitRoot 时
+  // 会被刷新。
   current: Fiber,
 
   // The following priority levels are used to distinguish between 1)
@@ -59,8 +56,22 @@ type BaseFiberRootProperties = {
   // 3) 未提交且可能被挂起的任务
   // 我们选择不把每一种阻塞等级（pending level）单独划分出来, 用粒度的损失换取更好的性能
   //
-  // The earliest and latest priority levels that are suspended from committing.
+  // TODO (itpt of Ian): 概述以下 ExpirationTime 相关字段的作用
+  // 从 packages\scheduler\src\Scheduler.js 和
+  // packages\react-reconciler\src\ReactFiberScheduler.js @computeExpirationForFiber 可知，
+  // fiber 的优先级被*暂时*分为了：
+  // 1) 立即执行              ImmediatePriority
+  // 2) 用户行为导致的中断     UserBlockingPriority
+  // 3) 普通                  NormalPriority
+  // 4) 低优先级              LowPriority
+  // 5) 空闲时运行            IdlePriority
+  // 五种优先级和两种其他情况决定了 fiber 的 ExpirationTime 该如何计算，
+  // 这两种情况是：
+  // 1) fiber.mode 不为并行模式（比如 hostRoot 的 fiber 就不是并行模式的）
+  // 2) fiberScheduler 正在处理但还未到提交阶段
+  // fiber 的 ExpirationTime 是如何计算成以下相关字段的，将在之后去分析。
   //
+  // The earliest and latest priority levels that are suspended from committing.
   earliestSuspendedTime: ExpirationTime,
   latestSuspendedTime: ExpirationTime,
   // The earliest and latest priority levels that are not known to be suspended.
@@ -82,11 +93,13 @@ type BaseFiberRootProperties = {
 
   pendingCommitExpirationTime: ExpirationTime,
   // A finished work-in-progress HostRoot that's ready to be committed.
+  // 已经处理完毕准备提交的 workInProgress HostRoot 节点
   finishedWork: Fiber | null,
   // Timeout handle returned by setTimeout. Used to cancel a pending timeout, if
   // it's superseded by a new one.
   timeoutHandle: TimeoutHandle | NoTimeout,
   // Top context object, used by renderSubtreeIntoContainer
+  // 见 packages\react-dom\src\client\ReactDOM.js @legacy_renderSubtreeIntoContainer
   context: Object | null,
   pendingContext: Object | null,
   // Determines if we should attempt to hydrate on the initial mount

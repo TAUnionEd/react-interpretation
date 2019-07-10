@@ -574,7 +574,9 @@ function legacyRenderSubtreeIntoContainer(
     if (typeof callback === 'function') {
       const originalCallback = callback;
       callback = function() {
-        // 实际上调用了 packages\react-reconciler\src\ReactFiberReconciler.js @getPublicRootInstance
+        // 调用了 packages\react-reconciler\src\ReactFiberReconciler.js @getPublicRootInstance
+        // 实际上返回了 root._internalRoot.current.child.stateNode，
+        // 即 React.render() 中创建 element 的 Component 或 function
         const instance = getPublicRootInstance(root._internalRoot);
         originalCallback.call(instance);
       };

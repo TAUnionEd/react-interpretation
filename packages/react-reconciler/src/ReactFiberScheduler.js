@@ -2045,6 +2045,12 @@ function requestCurrentTime() {
   // time). However, if two updates are scheduled within the same event, we
   // should treat their start times as simultaneous, even if the actual clock
   // time has advanced between the first and second call.
+  //
+  // requestCurrentTime 是被 scheduler 用来计算 expiration time 的（废话）。
+  //
+  // 过期时间是以当前时间（即事务的开始时间）为基础，做加法得出的。
+  // 然而，如果一个事件触发后安排注册了两次更新，我们应当将他们的开始时间视为相同的，
+  // 即使两次更新实际上并不是同时执行的。
 
   // In other words, because expiration times determine how updates are batched,
   // we want all updates of like priority that occur within the same event to
@@ -2056,6 +2062,9 @@ function requestCurrentTime() {
   //
   // But the scheduler time can only be updated if there's no pending work, or
   // if we know for certain that we're not in the middle of an event.
+  //
+  // 换言之，正因为过期时间决定了哪些更新会一起批量执行，我们才会想让同一事件
+  // 触发的、具有类似优先级的更新都具有相同的过期时间，否则我们就要哭了。
 
   if (isRendering) {
     // We're already rendering. Return the most recently read time.

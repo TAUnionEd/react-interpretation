@@ -377,6 +377,9 @@ ReactRoot.prototype.render = function(
   callback: ?() => mixed,
 ): Work {
   const root = this._internalRoot;
+  // ReactWork 见 function ReactWork()
+  // 实际上是实现了一个不带 reject 功能的 promise
+  // ReactWork.prototype._onCommit 相当于 Promise 中的 resolve
   const work = new ReactWork();
   callback = callback === undefined ? null : callback;
   if (__DEV__) {
@@ -582,7 +585,11 @@ function legacyRenderSubtreeIntoContainer(
       };
     }
     // Initial mount should not be batched.
+    // 初始化过程中不使用批量更新
+    // 参见 packages\react-reconciler\src\ReactFiberScheduler.js@unbatchedUpdates
     unbatchedUpdates(() => {
+      // 仅有调用 unstable_renderSubtreeIntoContainer 时 parentComponent 才有值
+      // 这里忽略
       if (parentComponent != null) {
         root.legacy_renderSubtreeIntoContainer(
           parentComponent,
@@ -590,10 +597,12 @@ function legacyRenderSubtreeIntoContainer(
           callback,
         );
       } else {
+        // 调用 ReactRoot.prototype.render
         root.render(children, callback);
       }
     });
   } else {
+    // 其实 update 和 init 操作唯一的不同就是，root.render 是否是批量执行的
     if (typeof callback === 'function') {
       const originalCallback = callback;
       callback = function() {
@@ -612,6 +621,8 @@ function legacyRenderSubtreeIntoContainer(
       root.render(children, callback);
     }
   }
+
+  // 返回 创建 element 所用的 Component 或 function
   return getPublicRootInstance(root._internalRoot);
 }
 

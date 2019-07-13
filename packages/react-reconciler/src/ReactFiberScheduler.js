@@ -1579,6 +1579,7 @@ function computeThreadID(
 }
 
 // Creates a unique async expiration time.
+// 创建于一个具有唯一性的异步过期时间
 function computeUniqueAsyncExpiration(): ExpirationTime {
   const currentTime = requestCurrentTime();
   let result = computeAsyncExpiration(currentTime);
@@ -1946,7 +1947,9 @@ let nestedUpdateCount: number = 0;
 let lastCommittedRootDuringThisBatch: FiberRoot | null = null;
 
 function recomputeCurrentRendererTime() {
+  // 计算当前时间和 import ReactFiberScheduler.js （即 React 初始化时）的时间差
   const currentTimeMs = now() - originalStartTimeMs;
+  // 经 msToExpirationTime 算出当前渲染时间
   currentRendererTime = msToExpirationTime(currentTimeMs);
 }
 
@@ -2046,11 +2049,11 @@ function requestCurrentTime() {
   // should treat their start times as simultaneous, even if the actual clock
   // time has advanced between the first and second call.
   //
-  // requestCurrentTime 是被 scheduler 用来计算 expiration time 的（废话）。
+  // requestCurrentTime 是被调度器用来计算过期时间的。
   //
-  // 过期时间是以当前时间（即事务的开始时间）为基础，做加法得出的。
-  // 然而，如果一个事件触发后安排注册了两次更新，我们应当将他们的开始时间视为相同的，
-  // 即使两次更新实际上并不是同时执行的。
+  // 过期时间是以当前时间（或称为开始时间）为基础，做加法得出的。
+  // 然而，如果一个事件触发后安排注册了两次更新，我们应当将他们的开始时间视为一致的，
+  // 即使这两次更新实际上并不是同时执行的。
 
   // In other words, because expiration times determine how updates are batched,
   // we want all updates of like priority that occur within the same event to
@@ -2064,13 +2067,20 @@ function requestCurrentTime() {
   // if we know for certain that we're not in the middle of an event.
   //
   // 换言之，正因为过期时间决定了哪些更新会一起批量执行，我们才会想让同一事件
-  // 触发的、具有类似优先级的更新都具有相同的过期时间，否则我们就要哭了。
+  // 触发的、具有类似优先级的更新都具有相同的过期时间，否则我们会破坏调度过程。
+  //
+  // 我们会持续跟踪两个独立的时间：当前“渲染”时间和当前“调度”时间。
+  // 渲染时间可以随时更新，他仅仅是为了减少对 performance.now 的调用。
+  // 但是调度时间只能在当前没有正在等待的任务，
+  // 或者当我们能确定我们不处于任何事件触发的过程中时，才会被更新。
 
   if (isRendering) {
     // We're already rendering. Return the most recently read time.
+    // 如果正在 render，返回上一次读到的时间。
     return currentSchedulerTime;
   }
   // Check if there's pending work.
+  // 计算并检查是否有正在等待的任务。
   findHighestPriorityRoot();
   if (
     nextFlushedExpirationTime === NoWork ||
@@ -2078,6 +2088,11 @@ function requestCurrentTime() {
   ) {
     // If there's no pending work, or if the pending work is offscreen, we can
     // read the current time without risk of tearing.
+    // 如果当前没有正在等待的任务，或者当前等待的任务没有进入执行窗口期，
+    // 我们可以没有破坏调度风险的获取当前时间。
+
+    // recomputeCurrentRendererTime 会给 currentRendererTime 赋值，
+    // 当前时间相对 React 初始化的时间越晚，这个值就越小
     recomputeCurrentRendererTime();
     currentSchedulerTime = currentRendererTime;
     return currentSchedulerTime;
@@ -2087,6 +2102,10 @@ function requestCurrentTime() {
   // within the same event to receive different expiration times, leading to
   // tearing. Return the last read time. During the next idle callback, the
   // time will be updated.
+  // 这时，已经有正在等待的任务了。我们也许是在浏览器触发事件时调用了这个方法。
+  // 如果我们现在去读取当前时间，可能会导致一个事件因为使用了不同的过期时间而触发多个更新，
+  // 从而导致调度混乱。所以这里直接返回上一次读到的时间。直到下一个空闲时间的回调，
+  // 调度时间和渲染时间才有可能被更新。
   return currentSchedulerTime;
 }
 

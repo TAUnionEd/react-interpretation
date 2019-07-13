@@ -422,9 +422,16 @@ ReactRoot.prototype.legacy_renderSubtreeIntoContainer = function(
   return work;
 };
 ReactRoot.prototype.createBatch = function(): Batch {
+  // 这个方法实际上创建了一个链表，链表节点即为 ReactBatch
+  // 链表的头挂载在 ReactRoot.ReactRoot.firstBatch 上，
+  // 即 reactFiberRoot.firstBatch。
+  // ReactBatch 中存储着代表结束时间的字段 _expirationTime，
+  // 这个链表按 _expirationTime 从大到小排序。
   const batch = new ReactBatch(this);
   const expirationTime = batch._expirationTime;
 
+  // 以下即为 ReactBatch 链表的排序算法，
+  // 每次创建 batch，都会遍历链表插入到合适的位置。
   const internalRoot = this._internalRoot;
   const firstBatch = internalRoot.firstBatch;
   if (firstBatch === null) {

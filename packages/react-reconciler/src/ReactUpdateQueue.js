@@ -107,13 +107,21 @@ import invariant from 'shared/invariant';
 import warningWithoutStack from 'shared/warningWithoutStack';
 
 export type Update<State> = {
+  // 更新的过期时间，从 fiber 中读取而来
   expirationTime: ExpirationTime,
 
+  // 更新的类型，他们具体的作用见本文件 function getStateFromUpdate
+  // tag 用来指导 update 的 state 更新策略
   tag: 0 | 1 | 2 | 3,
+  // render 创建的 payload 即为 { element }
+  // setState 创建的 payload 为其第一个参数，即一个 object 或 function
   payload: any,
+  // 会在 commit 阶段触发
   callback: (() => mixed) | null,
 
+  // Update 实际上也是一个链表结构，每增加一个 update 就会放到链表的末尾
   next: Update<State> | null,
+  // 下一个 effect 的 update
   nextEffect: Update<State> | null,
 };
 

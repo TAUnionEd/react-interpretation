@@ -1594,11 +1594,14 @@ function computeUniqueAsyncExpiration(): ExpirationTime {
 }
 
 function computeExpirationForFiber(currentTime: ExpirationTime, fiber: Fiber) {
+  // 获取当前优先级，默认为 NormalPriority
+  // 实际调用 packages\scheduler\src\Scheduler.js @function unstable_getCurrentPriorityLevel
   const priorityLevel = getCurrentPriorityLevel();
 
   let expirationTime;
   if ((fiber.mode & ConcurrentMode) === NoContext) {
     // Outside of concurrent mode, updates are always synchronous.
+    // 若 fiber 不为并行模式，则更新一直是同步进行的
     expirationTime = Sync;
   } else if (isWorking && !isCommitting) {
     // During render phase, updates expire during as the current render.

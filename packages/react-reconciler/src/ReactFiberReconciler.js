@@ -136,9 +136,12 @@ function scheduleRootUpdate(
     }
   }
 
+  // 这里创建了一个链表 ReactUpdate
+  // 参见 packages\react-reconciler\src\ReactUpdateQueue.js @type Update<State>
   const update = createUpdate(expirationTime);
   // Caution: React DevTools currently depends on this property
   // being called "element".
+  // 注意： React 开发工具目前依赖于这个属性，并将其称之为 element
   update.payload = {element};
 
   callback = callback === undefined ? null : callback;
@@ -182,6 +185,7 @@ export function updateContainerAtExpirationTime(
   }
 
   const context = getContextForSubtree(parentComponent);
+  // 若 parentComponent 为 null，则 getContextForSubtree 会返回空对象 {}
   if (container.context === null) {
     container.context = context;
   } else {

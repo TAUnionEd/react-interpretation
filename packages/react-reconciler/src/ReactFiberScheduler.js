@@ -1950,7 +1950,7 @@ let nestedUpdateCount: number = 0;
 let lastCommittedRootDuringThisBatch: FiberRoot | null = null;
 
 function recomputeCurrentRendererTime() {
-  // 计算当前时间和 import ReactFiberScheduler.js （即 React 初始化时）的时间差
+  // 计算当前时间和 import ReactFiberScheduler.js 时（即 React 初始化时）的时间差
   const currentTimeMs = now() - originalStartTimeMs;
   // 经 msToExpirationTime 算出当前渲染时间
   currentRendererTime = msToExpirationTime(currentTimeMs);
@@ -2055,8 +2055,8 @@ function requestCurrentTime() {
   // requestCurrentTime 是被调度器用来计算过期时间的。
   //
   // 过期时间是以当前时间（或称为开始时间）为基础，做加法得出的。
-  // 然而，如果一个事件触发后安排注册了两次更新，我们应当将他们的开始时间视为一致的，
-  // 即使这两次更新实际上并不是同时执行的。
+  // 然而，如果一个事件触发后调度了两个更新，我们应当将他们的开始时间视为一致的，
+  // 即使在这两次更新的调度方法被调用之间，实际的机器时钟已经过去了一些时间了。
 
   // In other words, because expiration times determine how updates are batched,
   // we want all updates of like priority that occur within the same event to
@@ -2075,7 +2075,7 @@ function requestCurrentTime() {
   // 我们会持续跟踪两个独立的时间：当前“渲染”时间和当前“调度”时间。
   // 渲染时间可以随时更新，他仅仅是为了减少对 performance.now 的调用。
   // 但是调度时间只能在当前没有正在等待的任务，
-  // 或者当我们能确定我们不处于任何事件触发的过程中时，才会被更新。
+  // 且我们能确定我们不处于任何事件触发的过程中时，才会被更新。
 
   if (isRendering) {
     // We're already rendering. Return the most recently read time.

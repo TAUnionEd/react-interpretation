@@ -1921,12 +1921,15 @@ function syncUpdates<A, B, C0, D, R>(
 // renderers. I'll do this in a follow-up.
 
 // Linked-list of roots
+// 被调度的 FiberRoot 环链表的头尾指针。
+// 参见 addRootToSchedule 和 findHighestPriorityRoot
 let firstScheduledRoot: FiberRoot | null = null;
 let lastScheduledRoot: FiberRoot | null = null;
 
 let callbackExpirationTime: ExpirationTime = NoWork;
 let callbackID: *;
 let isRendering: boolean = false;
+// 记录 FiberRoot 调度环链表中优先级最大的节点，以及其过期时间
 let nextFlushedRoot: FiberRoot | null = null;
 let nextFlushedExpirationTime: ExpirationTime = NoWork;
 let lowestPriorityPendingInteractiveExpirationTime: ExpirationTime = NoWork;
@@ -1938,6 +1941,7 @@ let isUnbatchingUpdates: boolean = false;
 
 let completedBatches: Array<Batch> | null = null;
 
+// 记录当前渲染时间和调度时间，帮助函数 requestCurrentTime 获取合适的过期时间。
 let originalStartTimeMs: number = now();
 let currentRendererTime: ExpirationTime = msToExpirationTime(
   originalStartTimeMs,
@@ -2144,9 +2148,13 @@ function requestWork(root: FiberRoot, expirationTime: ExpirationTime) {
 
 function addRootToSchedule(root: FiberRoot, expirationTime: ExpirationTime) {
   // Add the root to the schedule.
+  // 添加 FiberRoot 到调度中。
+
   // Check if this root is already part of the schedule.
+  // 首先检查这个 FiberRoot 是否已经在调度中了。
   if (root.nextScheduledRoot === null) {
     // This root is not already scheduled. Add it.
+    // 若不在调度中，则添加。这里维护了一个循环链表结构。
     root.expirationTime = expirationTime;
     if (lastScheduledRoot === null) {
       firstScheduledRoot = lastScheduledRoot = root;
@@ -2158,6 +2166,7 @@ function addRootToSchedule(root: FiberRoot, expirationTime: ExpirationTime) {
     }
   } else {
     // This root is already scheduled, but its priority may have increased.
+    // 若这个 FiberRoot 已经在调度中了，检查其优先级是否需要增加。
     const remainingExpirationTime = root.expirationTime;
     if (expirationTime > remainingExpirationTime) {
       // Update the priority.
@@ -2166,6 +2175,9 @@ function addRootToSchedule(root: FiberRoot, expirationTime: ExpirationTime) {
   }
 }
 
+// 遍历寻找优先级最高的 FiberRoot 及其 expirationTime。
+// 如上文函数 addRootToSchedule 所示，FiberRoot 已经被组织成了一个链表，以表示是否被添加到调度中了。
+// 起点指针为 firstScheduledRoot，末尾指针为 lastScheduledRoot。
 function findHighestPriorityRoot() {
   let highestPriorityWork = NoWork;
   let highestPriorityRoot = null;
@@ -2176,10 +2188,13 @@ function findHighestPriorityRoot() {
       const remainingExpirationTime = root.expirationTime;
       if (remainingExpirationTime === NoWork) {
         // This root no longer has work. Remove it from the scheduler.
+        // 这个节点上已经没有任务要执行了。接下来将其从调度器中移除。
 
         // TODO: This check is redudant, but Flow is confused by the branch
         // below where we set lastScheduledRoot to null, even though we break
         // from the loop right after.
+        // TODO：以下的检查有多处冗余，当我们把 lastScheduledRoot 置为 null 之后，
+        // 整个检查流程就被混淆了，即使我们在置为 null 后立即打断了对链表的遍历。
         invariant(
           previousScheduledRoot !== null && lastScheduledRoot !== null,
           'Should have a previous and last root. This error is likely ' +
@@ -2187,29 +2202,46 @@ function findHighestPriorityRoot() {
         );
         if (root === root.nextScheduledRoot) {
           // This is the only root in the list.
+          // 当前节点是链表中仅有的那个节点。
+
+          // 如 addRootToSchedule 所示，root.nextScheduledRoot 有值代表着整个节点已经被
+          // 调度器记录了，反之亦然。
           root.nextScheduledRoot = null;
+          // 首尾指针置空，即代表调度链表为空了。
           firstScheduledRoot = lastScheduledRoot = null;
           break;
         } else if (root === firstScheduledRoot) {
           // This is the first root in the list.
+          // 当前节点是链表中的第一个节点。
+
+          // 移除当前节点时，我们需要更改调度链表的头指针位置到下一节点。
           const next = root.nextScheduledRoot;
           firstScheduledRoot = next;
+          // 同时将尾部的下一节点指向新的头部，重新建立环。
           lastScheduledRoot.nextScheduledRoot = next;
           root.nextScheduledRoot = null;
         } else if (root === lastScheduledRoot) {
           // This is the last root in the list.
+          // 当前节点是链表中的最后一个节点。
+
+          // 移除当前节点时，我们需要更改调度链表的尾指针位置到上一节点。
           lastScheduledRoot = previousScheduledRoot;
+          // 同时将新的尾部的下一节点指向头部，重新建立环。
           lastScheduledRoot.nextScheduledRoot = firstScheduledRoot;
           root.nextScheduledRoot = null;
           break;
         } else {
+          // 其他情况，就正常执行链表移除的逻辑。
           previousScheduledRoot.nextScheduledRoot = root.nextScheduledRoot;
           root.nextScheduledRoot = null;
         }
+
         root = previousScheduledRoot.nextScheduledRoot;
       } else {
+        // 当前节点上还有未完成的工作。
         if (remainingExpirationTime > highestPriorityWork) {
           // Update the priority, if it's higher
+          // 当前优先级更高，则记录之
           highestPriorityWork = remainingExpirationTime;
           highestPriorityRoot = root;
         }
@@ -2219,6 +2251,8 @@ function findHighestPriorityRoot() {
         if (highestPriorityWork === Sync) {
           // Sync is highest priority by definition so
           // we can stop searching.
+          // Sync 是我们能定义的最高的优先级，所以这里链表就没有再遍历的必要了。
+          // 正因为这种剪枝，故我们不能保证所有的 NoWork FiberRoot 都会被移除。
           break;
         }
         previousScheduledRoot = root;
@@ -2260,7 +2294,9 @@ function performAsyncWork() {
         do {
           didExpireAtExpirationTime(root, currentRendererTime);
           // The root schedule is circular, so this is never null.
+          // 调度中的 FiberRoot 链表是环状的，所以这里 root 永远不会为空。
           root = (root.nextScheduledRoot: any);
+          // 将环链表循环一遍，直到重新回到头部。
         } while (root !== firstScheduledRoot);
       }
     }
